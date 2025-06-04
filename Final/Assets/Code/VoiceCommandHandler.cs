@@ -3,6 +3,12 @@ using UnityEngine.UI;
 using Pico.Platform;
 using Pico.Platform.Models;
 using TMPro;
+using System.Text.RegularExpressions;
+using UnityEngine.Windows;
+using static UnityEngine.InputSystem.InputControlScheme.MatchResult;
+
+
+
 #if PLATFORM_ANDROID
 using UnityEngine.Android;
 #endif
@@ -11,7 +17,7 @@ using System.Collections;
 public class VoiceCommandHandler : MonoBehaviour
 {
     [Header("绑定对象")]
-    public GameObject interactiveObject;  // 要控制的虚拟物体
+    public Text[] shoppingItems = new Text[8];
     public Text debugText;      // 调试文本（可选）
 
     [Header("ASR配置")]
@@ -22,10 +28,16 @@ public class VoiceCommandHandler : MonoBehaviour
     private bool isAsrConfigured = false; // ASR引擎是否初始化成功
     private bool permissionRequested;     // 是否已请求过麦克风权限
 
+    private static readonly Regex ChineseNumberPattern =
+        new Regex(@"([一二三四五六七八九十]+)([个只件条瓶盒袋桶包]+)");
+    private static readonly Regex ChineseNumber =
+        new Regex(@"([一二三四五六七八九十]+)");
+
     void Start()
     {
         // 初始权限检查
         RequestMicrophonePermission();
+        UpdateDebugText("初始权限检查 ");
     }
 
     // ================== 权限管理 ==================
@@ -40,6 +52,7 @@ public class VoiceCommandHandler : MonoBehaviour
         else
         {
             Permission.RequestUserPermission(Permission.Microphone);
+            UpdateDebugText("权限弹窗！");
             StartCoroutine(CheckPermissionAfterRequest());
             permissionRequested = true;
         }
@@ -52,6 +65,7 @@ public class VoiceCommandHandler : MonoBehaviour
 #if PLATFORM_ANDROID
     private IEnumerator CheckPermissionAfterRequest()
     {
+        
         // 等待权限弹窗关闭
         yield return new WaitUntil(() => Application.isFocused);
         yield return new WaitForSeconds(0.1f);
@@ -165,41 +179,84 @@ public class VoiceCommandHandler : MonoBehaviour
     #region 交互逻辑
     private void ProcessVoiceCommand(string command)
     {
-        if (interactiveObject == null)
+        UpdateDebugText(command);
+        if (command.Contains("牛奶巧克力") || 
+            command.Contains("咖啡") || 
+            command.Contains("矿泉水") || 
+            command.Contains("餐巾纸") || 
+            command.Contains("鸡蛋") ||
+            command.Contains("三明治") ||
+            command.Contains("巧克力棒") ||
+            command.Contains("麦片") ||
+            command.Contains("泡面") 
+            ) 
         {
-            UpdateDebugText("错误：未绑定物体");
-            return;
-        }
+            string commodity = "";
+            if (command.Contains("牛奶巧克力")) commodity = "牛奶巧克力";
+            else if (command.Contains("咖啡")) commodity = "咖啡";
+            else if (command.Contains("矿泉水")) commodity = "矿泉水";
+            else if (command.Contains("餐巾纸")) commodity = "餐巾纸";
+            else if (command.Contains("鸡蛋")) commodity = "鸡蛋";
+            else if (command.Contains("三明治")) commodity = "三明治";
+            else if (command.Contains("巧克力棒")) commodity = "巧克力棒";
+            else if (command.Contains("麦片")) commodity = "麦片";
+            else if (command.Contains("泡面")) commodity = "泡面";
 
-        bool processed = false;
-        if (command.Contains("出现") || command.Contains("显示"))
-        {
-            interactiveObject.SetActive(true);
-            processed = true;
+            MatchCollection matches = ChineseNumberPattern.Matches(command);
+            if (matches.Count > 0) {
+                
+                for (int i = 0; i < 8; i++)
+                {
+                    if (shoppingItems[i].text == "") 
+                    {
+                        string chineseNumber = matches[0].Groups[1].Value; // 汉语数字部分
+                        string unit = matches[0].Groups[2].Value;          // 量词部分
+                        switch (chineseNumber)
+                        {
+                            case "一": chineseNumber = "1"; break;
+                            case "二": chineseNumber = "2"; break;
+                            case "三": chineseNumber = "3"; break;
+                            case "四": chineseNumber = "4"; break;
+                            case "五": chineseNumber = "5"; break;
+                            case "六": chineseNumber = "6"; break;
+                            case "七": chineseNumber = "7"; break;
+                            case "八": chineseNumber = "8"; break;
+                            case "九": chineseNumber = "9"; break;
+                        }
+                        shoppingItems[i].text = $"{commodity}  {chineseNumber}{unit}";
+                        break;
+                    }
+                }
+            }
         }
-        else if (command.Contains("隐藏") || command.Contains("消失"))
+        else if (command.Contains("删除"))
         {
-            interactiveObject.SetActive(false);
-            processed = true;
+            MatchCollection matches = ChineseNumber.Matches(command);
+            if (command.Contains("全部")) 
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    shoppingItems[i].text = "";
+                }
+            }
+            else if(matches.Count > 0) 
+            { 
+                int index = 0;
+                string chineseNumber = matches[0].Groups[1].Value;
+                switch (chineseNumber)
+                {
+                    case "一": index = 0; break;
+                    case "二": index = 1; break;
+                    case "三": index = 2; break;
+                    case "四": index = 3; break;
+                    case "五": index = 4; break;
+                    case "六": index = 5; break;
+                    case "七": index = 6; break;
+                    case "八": index = 7; break;
+                }
+                shoppingItems[index].text = "";
+            }
         }
-        else if (command.Contains("红"))
-        {
-            SetObjectColor(Color.red);
-            processed = true;
-        }
-        else if (command.Contains("蓝"))
-        {
-            SetObjectColor(Color.blue);
-            processed = true;
-        }
-
-        Debug.Log(processed ? $"执行指令: {command}" : $"未知指令: {command}");
-    }
-
-    private void SetObjectColor(Color color)
-    {
-        Renderer renderer = interactiveObject.GetComponent<Renderer>();
-        if (renderer != null) renderer.material.color = color;
     }
     #endregion
 
